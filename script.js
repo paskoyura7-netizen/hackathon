@@ -1,7 +1,4 @@
 
-
-// ⚠️ УВАГА: Токен у відкритому коді видимий усім у браузері.
-// Для продакшну винеси запити на сервер (proxy/backend).
 const COZE_TOKEN = 'pat_a7cNS1ynL4dRxvnegq5ytHaJKoyu8NRSYYIBsFfsu9dvcw78LTmkYDoFoIv95Zc3';
 const BOT_ID     = '7634463423774031877';
 const API_BASE   = 'https://api.coze.com';
