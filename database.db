@@ -1,0 +1,16 @@
+
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tg_id BIGINT UNIQUE NOT NULL,
+        username TEXT,
+        joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'user'
+    );
+
+    CREATE TABLE IF NOT EXISTS user_actions (
+        action_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_tg_id BIGINT,
+        command_used TEXT,
+        action_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_tg_id) REFERENCES users(tg_id)
+    );
