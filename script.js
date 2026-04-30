@@ -1,9 +1,10 @@
-const COZE_TOKEN = 'pat_a7cNS1ynL4dRxvnegq5ytHaJKoyu8NRSYYIBsFfsu9dvcw78LTmkYDoFoIv95Zc3';
-const BOT_ID     = '7634463423774031877';
+const COZE_TOKEN = 'YOUR_TOKEN';
+const BOT_ID     = 'YOUR_BOT_ID';
 const API_BASE   = 'https://api.coze.com';
+
 const texts = [
   "Привіт 👋",
-  "Я твій AI друг!",
+  "Я твій AI друг",
   "Створений для допомоги студентам ІФНТУНГ"
 ];
 
@@ -47,21 +48,12 @@ function showChat() {
   }, 900);
 }
 
+// ================= CHAT UI =================
 
-
-
-
-
-
-
-
-
-
-
-const chatArea    = document.getElementById("chatArea");
+const chatArea     = document.getElementById("chatArea");
 const messageInput = document.getElementById("messageInput");
-const sendBtn     = document.getElementById("sendBtn");
-const statusBar   = document.getElementById("statusBar");
+const sendBtn      = document.getElementById("sendBtn");
+const statusBar    = document.getElementById("statusBar");
 
 function setStatus(text, type = "default") {
   statusBar.textContent = text;
@@ -101,9 +93,13 @@ function scrollToBottom() {
 }
 
 function getTime() {
-  return new Date().toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+  return new Date().toLocaleTimeString("uk-UA", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
+// ================= API =================
 
 const SESSION_USER_ID = "ifntunh_student_" + Math.random().toString(36).slice(2, 9);
 
@@ -135,87 +131,61 @@ async function callCozeAPI(message) {
   }
 
   const chatData = await chatRes.json();
-  console.log("Chat response:", chatData);
 
-  const chatId          = chatData.data?.id          ?? chatData.id;
-  const conversationId  = chatData.data?.conversation_id ?? chatData.conversation_id;
-
-  if (!chatId || !conversationId) {
-    throw new Error("Не вдалося отримати chat_id або conversation_id від Coze");
-  }
+  const chatId = chatData.data?.id ?? chatData.id;
+  const conversationId = chatData.data?.conversation_id ?? chatData.conversation_id;
 
   return await pollForAnswer(chatId, conversationId);
 }
 
 async function pollForAnswer(chatId, conversationId) {
-  const MAX_ATTEMPTS = 40;  
-  const INTERVAL_MS  = 1000; 
+  for (let i = 0; i < 40; i++) {
+    await sleep(1000);
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    await sleep(INTERVAL_MS);
-
-    const statusRes = await fetch(
+    const res = await fetch(
       `${API_BASE}/v3/chat/retrieve?chat_id=${chatId}&conversation_id=${conversationId}`,
       {
-        headers: { "Authorization": `Bearer ${COZE_TOKEN}` }
+        headers: { Authorization: `Bearer ${COZE_TOKEN}` }
       }
     );
 
-    if (statusRes.ok) {
-      const statusData = await statusRes.json();
-      console.log(`Attempt ${attempt + 1} status:`, statusData);
-
-      const status = statusData.data?.status ?? statusData.status;
+    if (res.ok) {
+      const data = await res.json();
+      const status = data.data?.status ?? data.status;
 
       if (status === "completed") {
         return await fetchMessages(chatId, conversationId);
       }
 
-      if (status === "failed" || status === "requires_action") {
-        throw new Error(`Coze повернув статус: ${status}`);
+      if (status === "failed") {
+        throw new Error("Запит не виконано");
       }
     }
   }
 
-  throw new Error("Час очікування вичерпано. Спробуй ще раз.");
+  throw new Error("Таймаут відповіді");
 }
 
 async function fetchMessages(chatId, conversationId) {
-  const msgRes = await fetch(
+  const res = await fetch(
     `${API_BASE}/v3/chat/message/list?chat_id=${chatId}&conversation_id=${conversationId}`,
     {
-      headers: { "Authorization": `Bearer ${COZE_TOKEN}` }
+      headers: { Authorization: `Bearer ${COZE_TOKEN}` }
     }
   );
 
-  if (!msgRes.ok) {
-    throw new Error(`Помилка отримання повідомлень: ${msgRes.status}`);
-  }
+  const data = await res.json();
+  const messages = data.data ?? [];
 
-  const msgData = await msgRes.json();
-  console.log("Messages:", msgData);
-
-  const messages = msgData.data ?? msgData.messages ?? [];
-
-  const answer = messages.find(
-    m => m.role === "assistant" && m.type === "answer"
-  );
-
-  if (answer && answer.content) {
-    return answer.content;
-  }
-
-  const anyAssistant = messages.find(m => m.role === "assistant");
-  if (anyAssistant && anyAssistant.content) {
-    return anyAssistant.content;
-  }
-
-  throw new Error("Бот відповів, але повідомлення порожнє.");
+  const answer = messages.find(m => m.role === "assistant");
+  return answer?.content || "Немає відповіді";
 }
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(r => setTimeout(r, ms));
 }
+
+// ================= SEND MESSAGE =================
 
 async function sendMessage() {
   const message = messageInput.value.trim();
@@ -232,19 +202,21 @@ async function sendMessage() {
   try {
     const reply = await callCozeAPI(message);
     typingEl.remove();
+
     addMessage(reply, "ai");
+    speak(reply);
+
     setStatus("Готовий до розмови ✦");
-  } catch (error) {
-    console.error("Помилка:", error);
+  } catch (e) {
     typingEl.remove();
-    addMessage(`Помилка: ${error.message}`, "ai");
-    setStatus("Сталася помилка. Спробуй ще раз.", "error");
-    setTimeout(() => setStatus("Готовий до розмови ✦"), 4000);
+    addMessage(`Помилка: ${e.message}`, "ai");
+    setStatus("Помилка", "error");
   } finally {
     sendBtn.disabled = false;
-    messageInput.focus();
   }
 }
+
+sendBtn.addEventListener("click", sendMessage);
 
 messageInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -253,19 +225,7 @@ messageInput.addEventListener("keydown", (e) => {
   }
 });
 
-sendBtn.addEventListener("click", sendMessage);
-
-
-
-
-
-
-
-
-
-
-
-
+// ================= VOICE =================
 
 const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
 
@@ -276,44 +236,33 @@ function startVoiceInput() {
   recognition.start();
 }
 
-
-
 recognition.onresult = function(event) {
   const text = event.results[0][0].transcript;
-
   messageInput.value = text;
+  sendMessage(); // 🔥 автосенд
 };
 
-async function sendMessage() {
-  const message = messageInput.value.trim();
-  if (!message) return;
-
-  addMessage(message, "user");
-  messageInput.value = "";
-
-  const typingEl = addTypingIndicator();
-
-  try {
-    const reply = await callCozeAPI(message);
-    typingEl.remove();
-
-    addMessage(reply, "ai");
-    speak(reply); 
-  } catch (error) {
-    typingEl.remove();
-    addMessage("Помилка", "ai");
-  }
-}
 recognition.onerror = function(event) {
   console.error("Speech error:", event.error);
-  alert("Помилка мікрофона: " + event.error);
 };
+
+recognition.onend = function() {
+  recognition.start(); // 🔁 постійне слухання
+};
+
+// ================= SPEECH =================
 
 function speak(text) {
   const speech = new SpeechSynthesisUtterance(text);
   speech.lang = "uk-UA";
+  speech.rate = 1;
+  speech.pitch = 1;
+
+  window.speechSynthesis.cancel();
   window.speechSynthesis.speak(speech);
 }
-if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-  console.warn("SpeechRecognition не підтримується");
-}
+
+// ================= INIT =================
+
+// авто старт голосу (можеш прибрати якщо не треба)
+recognition.start();
