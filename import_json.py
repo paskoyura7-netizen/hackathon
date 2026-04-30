@@ -1,39 +1,43 @@
+import json
 import sqlite3
 from datetime import datetime
 import re
-import json
 
 DB_NAME = 'student_calendar.db'
-JSON_FILE = 'schedule_data.json'
+JSON_FILE = 'json01.txt' # Вказуємо твій новий файл
 
-def import_bulletproof_schedule():
-    print(f"Запускаємо Regex-сканер для {JSON_FILE}...")
+def import_schedule():
+    print(f"Читаємо файл {JSON_FILE}...")
     
     try:
+        # Зчитуємо сирий файл
         with open(JSON_FILE, 'r', encoding='utf-8') as f:
-            content = f.read()
+            raw_content = f.read()
             
-        # Магія: Регулярний вираз, який ізолює кожну пару окремо, ігноруючи зламану загальну структуру
-        pattern = r'\{\s*"object"\s*:\s*"[^"]+".*?"lesson_description"\s*:\s*"[^"]*"\s*\}'
-        matches = re.findall(pattern, content, flags=re.DOTALL)
+        # МАГІЯ: Знаходимо місця, де стикаються дві групи (між "}}" та "{") і ставимо кому
+        clean_content = re.sub(r'\}\}\s*\{"psrozklad_export"', '}},\n{"psrozklad_export"', raw_content)
+        # Загортаємо все у квадратні дужки, щоб вийшов валідний JSON-масив
+        clean_content = f"[{clean_content}]"
+        
+        # Перетворюємо текст на словники Python
+        data_list = json.loads(clean_content)
         
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
         
-        # Очищуємо старий розклад
+        # Очищуємо базу перед новим записом
         cursor.execute("DELETE FROM schedule")
-        
         events_to_insert = []
         
-        for match in matches:
-            try:
-                # Прибираємо випадкові переноси рядків всередині знайденого блоку
-                clean_match = match.replace('\n', ' ')
-                lesson = json.loads(clean_match)
-                
+        # Перебираємо всі групи
+        for item in data_list:
+            # Дістаємо список пар для конкретної групи
+            roz_items = item.get('psrozklad_export', {}).get('roz_items', [])
+            
+            for lesson in roz_items:
                 desc = lesson.get('lesson_description', '').strip()
                 
-                # Пропускаємо порожні вікна та скасовані пари
+                # Пропускаємо порожні вікна і скасовані пари
                 if not desc or "Заняття відмінено" in desc:
                     continue
                     
@@ -41,18 +45,21 @@ def import_bulletproof_schedule():
                 date_str = lesson.get('date', '')
                 time_str = lesson.get('lesson_time', '')
                 
-                # Перетворюємо дату на день тижня
+                # Визначаємо день тижня з дати (1 - Пн, 5 - Пт)
                 try:
                     dt = datetime.strptime(date_str, "%d.%m.%Y")
-                    day_of_week = dt.weekday() + 1
+                    day = dt.weekday() + 1
                 except ValueError:
-                    day_of_week = 1
+                    day = 1
                     
                 times = time_str.split('-')
                 time_start = times[0].strip() if len(times) > 0 else ''
                 time_end = times[1].strip() if len(times) > 1 else ''
                 
-                # Розділяємо паралельні лабораторні
+                # Прибираємо слово "дистанційно", якщо воно приліпилося до назви
+                desc = desc.replace("дистанційно", "")
+                
+                # Розділяємо паралельні підгрупи (вони розділені подвійним пробілом)
                 parts = [p.strip() for p in desc.split('  ') if p.strip()]
                 
                 for part in parts:
@@ -63,14 +70,10 @@ def import_bulletproof_schedule():
                         subgroup = 2
                         
                     events_to_insert.append((
-                        group, subgroup, day_of_week, time_start, time_end, part, '', ''
+                        group, subgroup, day, time_start, time_end, part, '', ''
                     ))
                     
-            except json.JSONDecodeError:
-                # Якщо сканер зачепив зламаний шматок тексту - просто ігноруємо цю одну пару і йдемо далі
-                continue
-                
-        # Масово записуємо в базу
+        # Записуємо масив пар у базу даних
         cursor.executemany('''
             INSERT INTO schedule (group_name, subgroup, day_of_week, time_start, time_end, subject_name, teacher, room)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -78,10 +81,14 @@ def import_bulletproof_schedule():
         
         conn.commit()
         conn.close()
-        print(f"Успіх! Сканер оминув пошкодження і зберіг {len(events_to_insert)} пар у базу.")
+        print(f"Супер! Успішно розпарсено та збережено {len(events_to_insert)} пар.")
         
     except FileNotFoundError:
-        print(f"Помилка: Файл '{JSON_FILE}' не знайдено.")
+        print(f"Помилка: Файл '{JSON_FILE}' не знайдено в папці.")
+    except json.JSONDecodeError as e:
+        print(f"Помилка структури JSON: {e}")
+    except Exception as e:
+        print(f"Неочікувана помилка: {e}")
 
 if __name__ == '__main__':
-    import_bulletproof_schedule()
+    import_schedule()
