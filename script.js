@@ -1,38 +1,35 @@
-/* ═══════════════════════════════════════════
-   INTRO — друкування тексту
-═══════════════════════════════════════════ */
+const COZE_TOKEN = 'pat_a7cNS1ynL4dRxvnegq5ytHaJKoyu8NRSYYIBsFfsu9dvcw78LTmkYDoFoIv95Zc3';
+const BOT_ID     = '7634463423774031877';
+const API_BASE   = 'https://api.coze.com';
 const texts = [
   "Привіт 👋",
   "Я твій AI друг",
   "Створений для допомоги студентам ІФНТУНГ"
 ];
 
-const elements = [
+const lineEls = [
   document.getElementById("line1"),
   document.getElementById("line2"),
   document.getElementById("line3")
 ];
 
-const TYPING_SPEED = 50; // мс між символами
+const TYPING_SPEED = 55;
 
-function typeText(text, element, callback) {
+function typeText(text, el, cb) {
   let i = 0;
-  function step() {
+  (function step() {
     if (i < text.length) {
-      element.textContent += text[i++];
+      el.textContent += text[i++];
       setTimeout(step, TYPING_SPEED);
-    } else if (callback) {
-      callback();
-    }
-  }
-  step();
+    } else if (cb) cb();
+  })();
 }
 
-// Послідовний запуск трьох рядків → перехід до чату
-typeText(texts[0], elements[0], () =>
-  typeText(texts[1], elements[1], () =>
-    typeText(texts[2], elements[2], () => {
-      setTimeout(showChat, 2000);
+typeText(texts[0], lineEls[0], () =>
+  typeText(texts[1], lineEls[1], () =>
+    typeText(texts[2], lineEls[2], () => {
+      document.getElementById("introCursor").style.display = "none";
+      setTimeout(showChat, 1800);
     })
   )
 );
@@ -42,23 +39,24 @@ function showChat() {
   const inputBox = document.getElementById("inputBox");
 
   intro.style.opacity = "0";
-
   setTimeout(() => {
     intro.style.display = "none";
     chatArea.style.display = "flex";
     inputBox.classList.add("show");
-    input.focus();
+    messageInput.focus();
   }, 900);
 }
 
-/* ═══════════════════════════════════════════
-   ЕЛЕМЕНТИ ЧАТУ
-═══════════════════════════════════════════ */
-const chatArea = document.getElementById("chatArea");
-const input    = document.querySelector(".input");
-const sendBtn  = document.getElementById("sendBtn");
+const chatArea    = document.getElementById("chatArea");
+const messageInput = document.getElementById("messageInput");
+const sendBtn     = document.getElementById("sendBtn");
+const statusBar   = document.getElementById("statusBar");
 
-/* ── Додати повідомлення ── */
+function setStatus(text, type = "default") {
+  statusBar.textContent = text;
+  statusBar.className = "input-status" + (type !== "default" ? ` ${type}` : "");
+}
+
 function addMessage(text, role) {
   const wrapper = document.createElement("div");
   wrapper.className = `msg ${role}`;
@@ -74,81 +72,171 @@ function addMessage(text, role) {
   wrapper.appendChild(bubble);
   wrapper.appendChild(meta);
   chatArea.appendChild(wrapper);
-
   scrollToBottom();
   return wrapper;
 }
 
-/* ── Індикатор "друкує..." ── */
 function addTypingIndicator() {
   const wrapper = document.createElement("div");
   wrapper.className = "msg ai typing";
-
-  wrapper.innerHTML = `
-    <div class="bubble">
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-    </div>`;
-
+  wrapper.innerHTML = `<div class="bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
   chatArea.appendChild(wrapper);
   scrollToBottom();
   return wrapper;
 }
 
-/* ── Скрол вниз ── */
 function scrollToBottom() {
   chatArea.scrollTop = chatArea.scrollHeight;
 }
 
-/* ── Поточний час ── */
 function getTime() {
   return new Date().toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
 }
 
-/* ═══════════════════════════════════════════
-   ВІДПРАВКА ПОВІДОМЛЕННЯ
-═══════════════════════════════════════════ */
+
+const SESSION_USER_ID = "ifntunh_student_" + Math.random().toString(36).slice(2, 9);
+
+async function callCozeAPI(message) {
+  const chatRes = await fetch(`${API_BASE}/v3/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${COZE_TOKEN}`
+    },
+    body: JSON.stringify({
+      bot_id: BOT_ID,
+      user_id: SESSION_USER_ID,
+      stream: false,
+      auto_save_history: true,
+      additional_messages: [
+        {
+          role: "user",
+          content: message,
+          content_type: "text"
+        }
+      ]
+    })
+  });
+
+  if (!chatRes.ok) {
+    const errText = await chatRes.text();
+    throw new Error(`Coze API помилка ${chatRes.status}: ${errText}`);
+  }
+
+  const chatData = await chatRes.json();
+  console.log("Chat response:", chatData);
+
+  // Перевіряємо структуру відповіді
+  const chatId          = chatData.data?.id          ?? chatData.id;
+  const conversationId  = chatData.data?.conversation_id ?? chatData.conversation_id;
+
+  if (!chatId || !conversationId) {
+    throw new Error("Не вдалося отримати chat_id або conversation_id від Coze");
+  }
+
+  return await pollForAnswer(chatId, conversationId);
+}
+
+async function pollForAnswer(chatId, conversationId) {
+  const MAX_ATTEMPTS = 40;  
+  const INTERVAL_MS  = 1000; 
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    await sleep(INTERVAL_MS);
+
+    const statusRes = await fetch(
+      `${API_BASE}/v3/chat/retrieve?chat_id=${chatId}&conversation_id=${conversationId}`,
+      {
+        headers: { "Authorization": `Bearer ${COZE_TOKEN}` }
+      }
+    );
+
+    if (statusRes.ok) {
+      const statusData = await statusRes.json();
+      console.log(`Attempt ${attempt + 1} status:`, statusData);
+
+      const status = statusData.data?.status ?? statusData.status;
+
+      if (status === "completed") {
+        return await fetchMessages(chatId, conversationId);
+      }
+
+      if (status === "failed" || status === "requires_action") {
+        throw new Error(`Coze повернув статус: ${status}`);
+      }
+    }
+  }
+
+  throw new Error("Час очікування вичерпано. Спробуй ще раз.");
+}
+
+async function fetchMessages(chatId, conversationId) {
+  const msgRes = await fetch(
+    `${API_BASE}/v3/chat/message/list?chat_id=${chatId}&conversation_id=${conversationId}`,
+    {
+      headers: { "Authorization": `Bearer ${COZE_TOKEN}` }
+    }
+  );
+
+  if (!msgRes.ok) {
+    throw new Error(`Помилка отримання повідомлень: ${msgRes.status}`);
+  }
+
+  const msgData = await msgRes.json();
+  console.log("Messages:", msgData);
+
+  const messages = msgData.data ?? msgData.messages ?? [];
+
+  const answer = messages.find(
+    m => m.role === "assistant" && m.type === "answer"
+  );
+
+  if (answer && answer.content) {
+    return answer.content;
+  }
+
+  const anyAssistant = messages.find(m => m.role === "assistant");
+  if (anyAssistant && anyAssistant.content) {
+    return anyAssistant.content;
+  }
+
+  throw new Error("Бот відповів, але повідомлення порожнє.");
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function sendMessage() {
-  const message = input.value.trim();
+  const message = messageInput.value.trim();
   if (!message) return;
+  if (sendBtn.disabled) return;
 
-  // Показуємо повідомлення користувача
   addMessage(message, "user");
-  input.value = "";
+  messageInput.value = "";
   sendBtn.disabled = true;
+  setStatus("Бот думає...", "loading");
 
-  // Показуємо індикатор AI
   const typingEl = addTypingIndicator();
 
   try {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message })
-    });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const data = await response.json();
-
+    const reply = await callCozeAPI(message);
     typingEl.remove();
-    addMessage(data.reply ?? data.message ?? "Відповідь отримана ✅", "ai");
-
+    addMessage(reply, "ai");
+    setStatus("Готовий до розмови ✦");
   } catch (error) {
-    console.error("Помилка запиту:", error);
+    console.error("Помилка:", error);
     typingEl.remove();
-    addMessage("Помилка з'єднання з сервером 😔", "ai");
+    addMessage(`Помилка: ${error.message}`, "ai");
+    setStatus("Сталася помилка. Спробуй ще раз.", "error");
+    setTimeout(() => setStatus("Готовий до розмови ✦"), 4000);
   } finally {
     sendBtn.disabled = false;
-    input.focus();
+    messageInput.focus();
   }
 }
 
-/* ═══════════════════════════════════════════
-   ПОДІЇ
-═══════════════════════════════════════════ */
-input.addEventListener("keydown", (e) => {
+messageInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     sendMessage();
