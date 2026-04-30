@@ -11,9 +11,10 @@
 <body>
 
   <div class="container">
-<div class="link_in_tg">
-   <a href="https://t.me/ifntungschedulebot" target="_blank">Відкрити Telegram-бот</a> 
-</div>
+    <div class="link_in_tg">
+      <a href="https://t.me/ifntungschedulebot" target="_blank">Відкрити Telegram-бот</a>
+    </div>
+
     <div id="intro">
       <div class="intro-badge">ІФНТУНГ · AI</div>
       <h1 id="line1"></h1>
@@ -28,7 +29,7 @@
       <div class="input-status" id="statusBar">Готовий до розмови ✦</div>
       <div class="input-wrapper">
         <input class="input" id="messageInput" type="text" placeholder="Постав запитання..." autocomplete="off">
-        <button class="send-btn" onclick="startVoiceInput()">🎤</button>
+        <button class="send-btn mic-btn" id="micBtn" title="Голосове введення">🎤</button>
         <button class="send-btn" id="sendBtn" title="Надіслати">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
@@ -36,7 +37,6 @@
         </button>
       </div>
     </div>
-
   </div>
 
   <script src="script.js"></script>
