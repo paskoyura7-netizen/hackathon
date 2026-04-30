@@ -1,7 +1,10 @@
+// ⚠️ УВАГА: Токен у відкритому коді видимий усім у браузері.
+// Для продакшну винеси запити на сервер (proxy/backend).
 const COZE_TOKEN = 'pat_a7cNS1ynL4dRxvnegq5ytHaJKoyu8NRSYYIBsFfsu9dvcw78LTmkYDoFoIv95Zc3';
 const BOT_ID     = '7634463423774031877';
 const API_BASE   = 'https://api.coze.com';
 
+// ─── Intro анімація ───────────────────────────────────────────────────────────
 
 const texts = [
   "Привіт 👋",
@@ -49,12 +52,15 @@ function showChat() {
   }, 900);
 }
 
+// ─── DOM елементи чату ────────────────────────────────────────────────────────
 
 const chatArea     = document.getElementById("chatArea");
 const messageInput = document.getElementById("messageInput");
 const sendBtn      = document.getElementById("sendBtn");
 const micBtn       = document.getElementById("micBtn");
 const statusBar    = document.getElementById("statusBar");
+
+// ─── Допоміжні функції ────────────────────────────────────────────────────────
 
 function setStatus(text, type = "default") {
   statusBar.textContent = text;
@@ -101,6 +107,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ─── Coze API ─────────────────────────────────────────────────────────────────
 
 const SESSION_USER_ID = "ifntunh_student_" + Math.random().toString(36).slice(2, 9);
 
@@ -190,11 +197,12 @@ async function fetchMessages(chatId, conversationId) {
   throw new Error("Бот відповів, але повідомлення порожнє.");
 }
 
+// ─── Відправка повідомлення (єдина версія) ────────────────────────────────────
 
 async function sendMessage() {
   const message = messageInput.value.trim();
   if (!message) return;
-  if (sendBtn.disabled) return;   
+  if (sendBtn.disabled) return;   // захист від подвійного натискання
 
   addMessage(message, "user");
   messageInput.value = "";
@@ -207,7 +215,7 @@ async function sendMessage() {
     const reply = await callCozeAPI(message);
     typingEl.remove();
     addMessage(reply, "ai");
-    speak(reply);            
+    speak(reply);                 // озвучуємо відповідь
     setStatus("Готовий до розмови ✦");
   } catch (error) {
     console.error("Помилка:", error);
@@ -230,6 +238,7 @@ messageInput.addEventListener("keydown", (e) => {
 
 sendBtn.addEventListener("click", sendMessage);
 
+// ─── Озвучення тексту ─────────────────────────────────────────────────────────
 
 function speak(text) {
   if (!window.speechSynthesis) return;
@@ -238,21 +247,33 @@ function speak(text) {
   window.speechSynthesis.speak(speech);
 }
 
+// ─── Голосове введення (безпечна ініціалізація) ───────────────────────────────
 
 const SpeechAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 if (SpeechAPI) {
   const recognition = new SpeechAPI();
-  recognition.lang = 'uk-UA';
-  recognition.interimResults = false;
+  recognition.lang            = 'uk-UA';
+  recognition.interimResults  = false;
+  recognition.continuous      = false; // зупинятись після першої фрази
+  recognition.maxAlternatives = 1;
 
-  let isListening = false;
+  let isListening  = false;
+  let gotResult    = false; // прапор: результат вже отримано
+
+  function stopRecognition() {
+    isListening = false;
+    micBtn.classList.remove("listening");
+    try { recognition.stop(); } catch (_) {}
+  }
 
   function startVoiceInput() {
     if (isListening) {
-      recognition.stop();
+      stopRecognition();
+      setStatus("Готовий до розмови ✦");
       return;
     }
+    gotResult = false;
     try {
       recognition.start();
     } catch (e) {
@@ -266,22 +287,28 @@ if (SpeechAPI) {
     setStatus("🎤 Слухаю...", "mic");
   };
 
-  recognition.onend = () => {
-    isListening = false;
-    micBtn.classList.remove("listening");
-    setStatus("Готовий до розмови ✦");
-  };
-
   recognition.onresult = (event) => {
+    gotResult = true;
     const text = event.results[0][0].transcript;
     messageInput.value = text;
+    // Зупиняємо одразу після результату — не чекаємо onend
+    stopRecognition();
+    setStatus("Готовий до розмови ✦");
     messageInput.focus();
+  };
+
+  recognition.onend = () => {
+    // onend завжди спрацьовує — прибираємо стан якщо результату не було
+    if (isListening) {
+      isListening = false;
+      micBtn.classList.remove("listening");
+      if (!gotResult) setStatus("Готовий до розмови ✦");
+    }
   };
 
   recognition.onerror = (event) => {
     console.error("Speech error:", event.error);
-    isListening = false;
-    micBtn.classList.remove("listening");
+    stopRecognition();
     const msgs = {
       "not-allowed": "Доступ до мікрофону заборонено. Дозволь його в налаштуваннях браузера.",
       "no-speech":   "Нічого не почуто. Спробуй ще раз.",
@@ -294,6 +321,7 @@ if (SpeechAPI) {
   micBtn.addEventListener("click", startVoiceInput);
 
 } else {
+  // Браузер не підтримує — ховаємо кнопку
   console.warn("SpeechRecognition не підтримується цим браузером.");
   micBtn.style.display = "none";
 }
