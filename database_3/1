@@ -1,0 +1,231 @@
+import sqlite3
+from datetime import datetime
+
+DB_NAME = 'student_calendar.db'
+
+def create_tables():
+    """Створює повну структуру бази даних."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    # 1. Таблиця предметів (Subjects)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS subjects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT
+        )
+    ''')
+
+    # 2. Таблиця користувачів (Students)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            group_id TEXT NOT NULL, -- Наприклад, 'ІПЗ-25-1' (для зв'язку з розкладом)
+            course_year INTEGER DEFAULT 1,
+            specialty TEXT
+        )
+    ''')
+
+    # 3. Особисті події та дедлайни студента (Events)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER,
+            subject_id TEXT,
+            event_type TEXT NOT NULL, 
+            title TEXT NOT NULL,
+            event_date DATETIME NOT NULL,
+            is_completed BOOLEAN DEFAULT 0,
+            FOREIGN KEY (student_id) REFERENCES students (id),
+            FOREIGN KEY (subject_id) REFERENCES subjects (id)
+        )
+    ''')
+
+    # 4. НОВЕ: Постійний розклад пар (Schedule - для інтеграції з ІФНТУНГ)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS schedule (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id TEXT NOT NULL,
+            day_of_week INTEGER NOT NULL, -- 1 (Понеділок) ... 5 (П'ятниця)
+            time_start TEXT NOT NULL,     -- '08:30'
+            time_end TEXT NOT NULL,       -- '09:50'
+            subject_id TEXT,
+            teacher TEXT NOT NULL,
+            room TEXT NOT NULL,
+            FOREIGN KEY (subject_id) REFERENCES subjects (id)
+        )
+    ''')
+
+    # 5. НОВЕ: Загальноуніверситетські події (З таблиці Excel)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS university_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL, -- 'official', 'scientific', 'entertainment'
+            title TEXT NOT NULL,
+            event_date DATE
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+    print("Database structure successfully created!")
+
+def seed_initial_data():
+    """Наповнює базу тестовими даними (включно з даними з Excel)."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    # --- Базові дані ---
+    subjects = [
+        ('math-01', 'Higher Mathematics', 'Calculus and Analytical Geometry'),
+        ('cpp-01', 'C++ Programming', 'Basics, classes, exception handling'),
+        ('arch-01', 'Software Architecture', 'Design patterns and system design')
+    ]
+    cursor.executemany('INSERT OR IGNORE INTO subjects VALUES (?, ?, ?)', subjects)
+
+    cursor.execute('''
+        INSERT OR IGNORE INTO students (id, name, group_id, course_year, specialty) 
+        VALUES (1, 'Test Student', 'ІПЗ-25-1', 1, 'Software Engineering')
+    ''')
+
+    events = [
+        (1, 'cpp-01', 'deadline', 'Submit Exception Handling Lab', '2026-05-05 23:59:00', 0),
+        (1, 'math-01', 'lecture', 'Lecture on Bezier Curves', '2026-05-02 10:00:00', 0)
+    ]
+    cursor.executemany('''
+        INSERT INTO events (student_id, subject_id, event_type, title, event_date, is_completed)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', events)
+
+    # --- Дані розкладу ІФНТУНГ (Демонстрація) ---
+    schedule_data = [
+        ('ІПЗ-25-1', 1, '08:30', '09:50', 'math-01', 'Проф. Коваленко', 'Ауд. 4105'),
+        ('ІПЗ-25-1', 1, '10:05', '11:25', 'cpp-01', 'Доц. Іваненко', 'Ауд. 5201'),
+        ('ІПЗ-25-1', 2, '08:30', '09:50', 'arch-01', 'Проф. Сидоренко', 'Ауд. 1402')
+    ]
+    cursor.executemany('''
+        INSERT INTO schedule (group_id, day_of_week, time_start, time_end, subject_id, teacher, room)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', schedule_data)
+
+    # --- Дані подій з Excel (Парсинг категорій та дат) ---
+    excel_events = [
+        # Офіційні заходи (official)
+        ('official', 'День відкритих дверей', '2026-04-24'),
+        ('official', 'День зустрічі з ректором', '2026-08-28'),
+        ('official', 'Святкування 1 вересня', '2026-09-01'),
+        ('official', 'День збройних сил України', '2026-12-06'),
+        
+        # Науково-освітні (scientific)
+        ('scientific', 'Студентська наукова конференція з вищої математики', '2027-04-07'),
+        ('scientific', 'Всеукраїнська олімпіада з програмування 1 Етап', '2027-03-05'),
+        ('scientific', 'NASA Space Apps Challenge', '2026-11-22'),
+        ('scientific', "Queen's Hackathon", '2027-02-07'),
+        
+        # Освітньо-розважальні (entertainment)
+        ('entertainment', 'День програміста', '2027-01-07'),
+        ('entertainment', 'Свято до дня народження Тараса Шевченка', '2027-03-09'),
+        ('entertainment', 'Новий рік', '2027-01-01')
+    ]
+    cursor.executemany('''
+        INSERT INTO university_events (category, title, event_date)
+        VALUES (?, ?, ?)
+    ''', excel_events)
+
+    conn.commit()
+    conn.close()
+    print("Test data successfully loaded!")
+
+# --- API Функції для твого колеги (Фронтендера) ---
+
+def get_all_subjects():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM subjects")
+    data = cursor.fetchall()
+    conn.close()
+    return data
+
+def get_student_calendar(student_id):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT e.title, e.event_date, e.event_type, s.name, e.is_completed
+        FROM events e
+        JOIN subjects s ON e.subject_id = s.id
+        WHERE e.student_id = ?
+        ORDER BY e.event_date ASC
+    ''', (student_id,))
+    data = cursor.fetchall()
+    conn.close()
+    return data
+
+# НОВЕ: Отримання розкладу пар по групі
+def get_schedule_by_group(group_id, day_of_week=None):
+    """Повертає розклад пар для групи. Можна вказати конкретний день тижня (1-5)."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT sch.day_of_week, sch.time_start, sch.time_end, s.name, sch.teacher, sch.room
+        FROM schedule sch
+        JOIN subjects s ON sch.subject_id = s.id
+        WHERE sch.group_id = ?
+    '''
+    params = [group_id]
+    
+    if day_of_week:
+        query += ' AND sch.day_of_week = ?'
+        params.append(day_of_week)
+        
+    query += ' ORDER BY sch.day_of_week, sch.time_start'
+    
+    cursor.execute(query, params)
+    data = cursor.fetchall()
+    conn.close()
+    return data
+
+# НОВЕ: Отримання подій з Excel за категорією
+def get_university_events(category=None):
+    """Повертає загальні події. Якщо вказати категорію ('official', 'scientific'), поверне тільки їх."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    if category:
+        cursor.execute("SELECT title, event_date, category FROM university_events WHERE category = ? ORDER BY event_date ASC", (category,))
+    else:
+        cursor.execute("SELECT title, event_date, category FROM university_events ORDER BY event_date ASC")
+        
+    data = cursor.fetchall()
+    conn.close()
+    return data
+
+def add_event(student_id, subject_id, event_type, title, event_date):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO events (student_id, subject_id, event_type, title, event_date, is_completed)
+        VALUES (?, ?, ?, ?, ?, 0)
+    ''', (student_id, subject_id, event_type, title, event_date))
+    conn.commit()
+    conn.close()
+    print(f"Event '{title}' added successfully!")
+
+if __name__ == '__main__':
+    # Очищуємо стару базу для чистого тесту (опціонально, можна видалити файл бази вручну)
+    import os
+    if os.path.exists(DB_NAME):
+        os.remove(DB_NAME)
+
+    create_tables()
+    seed_initial_data() 
+    
+    print("\n--- Test: Schedule for ІПЗ-25-1 (Monday) ---")
+    for lesson in get_schedule_by_group('ІПЗ-25-1', day_of_week=1):
+        print(f"{lesson[1]}-{lesson[2]} | {lesson[3]} | {lesson[4]} | {lesson[5]}")
+    
+    print("\n--- Test: Scientific Events (Excel) ---")
+    for ev in get_university_events('scientific'):
+        print(f"{ev[1]} - {ev[0]}")
