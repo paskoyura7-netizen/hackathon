@@ -1,7 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-  // ⚠️ НЕ ЗБЕРІГАЙ ТОКЕН У ФРОНТЕНДІ (тільки для тесту)
-  const COZE_TOKEN = 'YOUR_COZE_TOKEN_HERE';
+  const COZE_TOKEN = 'pat_TE5IyBLr4wdEZbV87Xar8zW2Gh3xbY9VQAV6W4JPXyBRzbUqb0GH3jrP3tBVhsjb';
   const BOT_ID     = '7634463423774031877';
   const API_BASE   = 'https://api.coze.com';
 
