@@ -116,7 +116,7 @@ def add_event(student_id, subject_id, event_type, title, event_date):
     conn.commit()
     conn.close()
     print(f"Event '{title}' added successfully!")
-if name == 'main':
+if __name__ == '__main__':
     # Цей блок виконується лише при прямому запуску файлу
     create_tables()
     seed_initial_data() 
