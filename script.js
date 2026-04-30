@@ -1,10 +1,7 @@
-// ⚠️ УВАГА: Токен у відкритому коді видимий усім у браузері.
-// Для продакшну винеси запити на сервер (proxy/backend).
 const COZE_TOKEN = 'pat_a7cNS1ynL4dRxvnegq5ytHaJKoyu8NRSYYIBsFfsu9dvcw78LTmkYDoFoIv95Zc3';
 const BOT_ID     = '7634463423774031877';
 const API_BASE   = 'https://api.coze.com';
 
-// ─── Intro анімація ───────────────────────────────────────────────────────────
 
 const texts = [
   "Привіт 👋",
@@ -52,15 +49,12 @@ function showChat() {
   }, 900);
 }
 
-// ─── DOM елементи чату ────────────────────────────────────────────────────────
 
 const chatArea     = document.getElementById("chatArea");
 const messageInput = document.getElementById("messageInput");
 const sendBtn      = document.getElementById("sendBtn");
 const micBtn       = document.getElementById("micBtn");
 const statusBar    = document.getElementById("statusBar");
-
-// ─── Допоміжні функції ────────────────────────────────────────────────────────
 
 function setStatus(text, type = "default") {
   statusBar.textContent = text;
@@ -107,7 +101,6 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ─── Coze API ─────────────────────────────────────────────────────────────────
 
 const SESSION_USER_ID = "ifntunh_student_" + Math.random().toString(36).slice(2, 9);
 
@@ -197,12 +190,11 @@ async function fetchMessages(chatId, conversationId) {
   throw new Error("Бот відповів, але повідомлення порожнє.");
 }
 
-// ─── Відправка повідомлення (єдина версія) ────────────────────────────────────
 
 async function sendMessage() {
   const message = messageInput.value.trim();
   if (!message) return;
-  if (sendBtn.disabled) return;   // захист від подвійного натискання
+  if (sendBtn.disabled) return;   
 
   addMessage(message, "user");
   messageInput.value = "";
@@ -215,7 +207,7 @@ async function sendMessage() {
     const reply = await callCozeAPI(message);
     typingEl.remove();
     addMessage(reply, "ai");
-    speak(reply);                 // озвучуємо відповідь
+    speak(reply);            
     setStatus("Готовий до розмови ✦");
   } catch (error) {
     console.error("Помилка:", error);
@@ -238,7 +230,6 @@ messageInput.addEventListener("keydown", (e) => {
 
 sendBtn.addEventListener("click", sendMessage);
 
-// ─── Озвучення тексту ─────────────────────────────────────────────────────────
 
 function speak(text) {
   if (!window.speechSynthesis) return;
@@ -247,7 +238,6 @@ function speak(text) {
   window.speechSynthesis.speak(speech);
 }
 
-// ─── Голосове введення (безпечна ініціалізація) ───────────────────────────────
 
 const SpeechAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -304,7 +294,6 @@ if (SpeechAPI) {
   micBtn.addEventListener("click", startVoiceInput);
 
 } else {
-  // Браузер не підтримує — ховаємо кнопку
   console.warn("SpeechRecognition не підтримується цим браузером.");
   micBtn.style.display = "none";
 }
